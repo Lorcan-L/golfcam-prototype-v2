@@ -46,6 +46,39 @@
         .destination-marker .dest-pulse { position: absolute; bottom: -4px; left: 50%; transform: translateX(-50%); width: 8px; height: 3px; background: rgba(255,159,10,0.4); border-radius: 50%; filter: blur(2px); animation: destPulse 2s ease-in-out infinite; }
         @keyframes destPulse { 0%, 100% { transform: translateX(-50%) scale(1); opacity: 0.4; } 50% { transform: translateX(-50%) scale(1.5); opacity: 0.2; } }
         
+        /* PS风格控制手柄 */
+        .control-handle {
+            position: absolute;
+            width: 18px;
+            height: 18px;
+            background: linear-gradient(135deg, #ffffff 0%, #f0f0f0 100%);
+            border: 2.5px solid #0A84FF;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            cursor: grab;
+            z-index: 60;
+            display: none;
+            pointer-events: all;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3), 0 0 0 3px rgba(10, 132, 255, 0.15);
+            transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.15s;
+        }
+        
+        .control-handle.active {
+            display: block;
+            animation: handleAppear 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        
+        @keyframes handleAppear {
+            0% { transform: translate(-50%, -50%) scale(0); }
+            100% { transform: translate(-50%, -50%) scale(1); }
+        }
+        
+        .control-handle:active {
+            cursor: grabbing;
+            transform: translate(-50%, -50%) scale(1.25);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4), 0 0 0 5px rgba(10, 132, 255, 0.25);
+        }
+        
         .timeline-area { background: rgba(15,15,15,0.98); backdrop-filter: blur(24px); padding: 10px 0 14px; border-top: 0.5px solid rgba(255,255,255,0.08); }
         .timeline-header { display: flex; justify-content: space-between; align-items: center; padding: 0 16px; margin-bottom: 10px; }
         .time-display { font-size: 13px; color: #fff; font-variant-numeric: tabular-nums; font-weight: 500; letter-spacing: 0.01em; }
@@ -110,6 +143,8 @@
                 <svg viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5" fill="#000"/></svg>
                 <div class="dest-pulse"></div>
             </div>
+            <div class="control-handle" id="handle1"></div>
+            <div class="control-handle" id="handle2"></div>
             <div class="export-overlay" id="exportOverlay">
                 <div class="export-text">正在导出... <span id="progressText">0</span>%</div>
                 <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
@@ -138,38 +173,57 @@
         </div>
     </div>
     <script>
-        const state = { mode: 'idle', currentTime: 0, duration: 5.23, isPlaying: false, startPoint: null, endPoint: null, history: [], historyIndex: -1, isDragging: false, dragTarget: null };
+        const state = { mode: 'idle', currentTime: 0, duration: 5.23, isPlaying: false, startPoint: null, endPoint: null, cp1: null, cp2: null, history: [], historyIndex: -1, isDragging: false, dragTarget: null };
         const MAX_HISTORY = 100;
         
         function init() { generateFrames(); setupTimelineDrag(); setupCanvas(); setupMarkerDrag(); updateUI(); }
         function generateFrames() { const track = document.getElementById('timelineTrack'); for (let i = 0; i < 30; i++) { const frame = document.createElement('div'); frame.className = 'frame-thumb' + (i === 0 ? ' active' : ''); frame.innerHTML = '<div class="frame-thumb-inner"></div>'; track.appendChild(frame); } }
         function setupCanvas() { const canvas = document.getElementById('traceCanvas'); const container = document.getElementById('previewArea'); canvas.width = container.clientWidth; canvas.height = container.clientHeight; window.addEventListener('resize', () => { canvas.width = container.clientWidth; canvas.height = container.clientHeight; drawCurve(); }); }
         
-        function drawCurve() {
-            const canvas = document.getElementById('traceCanvas'); const ctx = canvas.getContext('2d'); ctx.clearRect(0, 0, canvas.width, canvas.height);
-            if (!state.startPoint || !state.endPoint) return;
+        function getControlPoints() {
+            if (!state.startPoint || !state.endPoint) return null;
             const p0 = state.startPoint, p2 = state.endPoint;
             const midX = (p0.x + p2.x) / 2, midY = (p0.y + p2.y) / 2;
-            const cp1x = midX + (p0.x - midX) * 0.3, cp1y = midY - 100;
-            const cp2x = midX + (p2.x - midX) * 0.3, cp2y = midY - 100;
+            if (!state.cp1) state.cp1 = { x: midX + (p0.x - midX) * 0.3, y: midY - 100 };
+            if (!state.cp2) state.cp2 = { x: midX + (p2.x - midX) * 0.3, y: midY - 100 };
+            return { p0, p1: state.cp1, p2: state.cp2, p3: p2 };
+        }
+        
+        function drawCurve() {
+            const canvas = document.getElementById('traceCanvas'); const ctx = canvas.getContext('2d'); ctx.clearRect(0, 0, canvas.width, canvas.height);
+            const pts = getControlPoints(); if (!pts) return;
             const steps = 100;
             for (let i = 0; i < steps; i++) {
                 const t1 = i / steps, t2 = (i + 1) / steps;
-                const pos1 = getBezierPoint(t1, p0, {x: cp1x, y: cp1y}, {x: cp2x, y: cp2y}, p2);
-                const pos2 = getBezierPoint(t2, p0, {x: cp1x, y: cp1y}, {x: cp2x, y: cp2y}, p2);
+                const pos1 = getBezierPoint(t1, pts.p0, pts.p1, pts.p2, pts.p3);
+                const pos2 = getBezierPoint(t2, pts.p0, pts.p1, pts.p2, pts.p3);
                 const lineWidth = 5 - (t1 * 3.5), alpha = 1 - (t1 * 0.3);
                 ctx.beginPath(); ctx.moveTo(pos1.x, pos1.y); ctx.lineTo(pos2.x, pos2.y);
                 ctx.strokeStyle = `rgba(48, 209, 88, ${alpha})`; ctx.lineWidth = lineWidth; ctx.lineCap = 'round'; ctx.stroke();
             }
             ctx.save(); ctx.shadowColor = 'rgba(48, 209, 88, 0.4)'; ctx.shadowBlur = 12;
-            ctx.beginPath(); ctx.moveTo(p0.x, p0.y); ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
+            ctx.beginPath(); ctx.moveTo(pts.p0.x, pts.p0.y); ctx.bezierCurveTo(pts.p1.x, pts.p1.y, pts.p2.x, pts.p2.y, pts.p3.x, pts.p3.y);
             ctx.strokeStyle = 'rgba(48, 209, 88, 0.3)'; ctx.lineWidth = 2; ctx.stroke(); ctx.restore();
+            // 控制线
+            if (state.mode === 'editing') {
+                ctx.save(); ctx.strokeStyle = 'rgba(255,255,255,0.2)'; ctx.lineWidth = 1; ctx.setLineDash([3, 3]);
+                ctx.beginPath(); ctx.moveTo(pts.p0.x, pts.p0.y); ctx.lineTo(pts.p1.x, pts.p1.y); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(pts.p3.x, pts.p3.y); ctx.lineTo(pts.p2.x, pts.p2.y); ctx.stroke();
+                ctx.restore();
+            }
         }
         
         function getBezierPoint(t, p0, p1, p2, p3) {
             const cX = 3 * (p1.x - p0.x), bX = 3 * (p2.x - p1.x) - cX, aX = p3.x - p0.x - cX - bX;
             const cY = 3 * (p1.y - p0.y), bY = 3 * (p2.y - p1.y) - cY, aY = p3.y - p0.y - cY - bY;
             return { x: (aX * Math.pow(t, 3)) + (bX * Math.pow(t, 2)) + (cX * t) + p0.x, y: (aY * Math.pow(t, 3)) + (bY * Math.pow(t, 2)) + (cY * t) + p0.y };
+        }
+        
+        function updateControlHandles() {
+            const h1 = document.getElementById('handle1'), h2 = document.getElementById('handle2');
+            if (state.mode !== 'editing' || !state.cp1 || !state.cp2) { h1.classList.remove('active'); h2.classList.remove('active'); return; }
+            h1.style.left = state.cp1.x + 'px'; h1.style.top = state.cp1.y + 'px'; h1.classList.add('active');
+            h2.style.left = state.cp2.x + 'px'; h2.style.top = state.cp2.y + 'px'; h2.classList.add('active');
         }
         
         function setupMarkerDrag() {
@@ -179,30 +233,44 @@
             document.getElementById('startMarker').addEventListener('touchstart', (e) => startMarkerDrag(e, 'start'), { passive: false });
             document.getElementById('endMarker').addEventListener('mousedown', (e) => startMarkerDrag(e, 'end'));
             document.getElementById('endMarker').addEventListener('touchstart', (e) => startMarkerDrag(e, 'end'), { passive: false });
+            document.getElementById('handle1').addEventListener('mousedown', (e) => startHandleDrag(e, 'cp1'));
+            document.getElementById('handle1').addEventListener('touchstart', (e) => startHandleDrag(e, 'cp1'), { passive: false });
+            document.getElementById('handle2').addEventListener('mousedown', (e) => startHandleDrag(e, 'cp2'));
+            document.getElementById('handle2').addEventListener('touchstart', (e) => startHandleDrag(e, 'cp2'), { passive: false });
         }
         
-        function startMarkerDrag(e, type) { e.preventDefault(); e.stopPropagation(); state.isDragging = true; const point = type === 'start' ? state.startPoint : state.endPoint; state.dragTarget = { type, startX: point.x, startY: point.y }; const clientX = e.touches ? e.touches[0].clientX : e.clientX, clientY = e.touches ? e.touches[0].clientY : e.clientY; state.dragTarget.mouseStartX = clientX; state.dragTarget.mouseStartY = clientY; document.getElementById(type === 'start' ? 'startMarker' : 'endMarker').classList.add('highlight'); }
-        function handleDragMove(e) { if (!state.isDragging || !state.dragTarget) return; e.preventDefault(); const clientX = e.touches ? e.touches[0].clientX : e.clientX, clientY = e.touches ? e.touches[0].clientY : e.clientY; const dx = clientX - state.dragTarget.mouseStartX, dy = clientY - state.dragTarget.mouseStartY; const point = state.dragTarget.type === 'start' ? state.startPoint : state.endPoint; point.x = state.dragTarget.startX + dx; point.y = state.dragTarget.startY + dy; updateMarkerPosition(state.dragTarget.type); drawCurve(); }
-        function handleDragEnd() { if (!state.isDragging) return; document.getElementById('startMarker').classList.remove('highlight'); document.getElementById('endMarker').classList.remove('highlight'); if (state.dragTarget) saveHistory('moveMarker', { type: state.dragTarget.type, oldX: state.dragTarget.startX, oldY: state.dragTarget.startY, newX: state.dragTarget.type === 'start' ? state.startPoint.x : state.endPoint.x, newY: state.dragTarget.type === 'start' ? state.startPoint.y : state.endPoint.y }); state.isDragging = false; state.dragTarget = null; updateUI(); }
-        function updateMarkerPosition(type) { const point = type === 'start' ? state.startPoint : state.endPoint; const marker = document.getElementById(type === 'start' ? 'startMarker' : 'endMarker'); marker.style.left = point.x + 'px'; marker.style.top = point.y + 'px'; }
+        function startMarkerDrag(e, type) { e.preventDefault(); e.stopPropagation(); state.isDragging = true; const point = type === 'start' ? state.startPoint : state.endPoint; state.dragTarget = { kind: 'marker', type, startX: point.x, startY: point.y }; const clientX = e.touches ? e.touches[0].clientX : e.clientX, clientY = e.touches ? e.touches[0].clientY : e.clientY; state.dragTarget.mouseStartX = clientX; state.dragTarget.mouseStartY = clientY; document.getElementById(type === 'start' ? 'startMarker' : 'endMarker').classList.add('highlight'); }
+        function startHandleDrag(e, type) { e.preventDefault(); e.stopPropagation(); state.isDragging = true; const point = type === 'cp1' ? state.cp1 : state.cp2; state.dragTarget = { kind: 'handle', type, startX: point.x, startY: point.y }; const clientX = e.touches ? e.touches[0].clientX : e.clientX, clientY = e.touches ? e.touches[0].clientY : e.clientY; state.dragTarget.mouseStartX = clientX; state.dragTarget.mouseStartY = clientY; }
+        function handleDragMove(e) { if (!state.isDragging || !state.dragTarget) return; e.preventDefault(); const clientX = e.touches ? e.touches[0].clientX : e.clientX, clientY = e.touches ? e.touches[0].clientY : e.clientY; const dx = clientX - state.dragTarget.mouseStartX, dy = clientY - state.dragTarget.mouseStartY; if (state.dragTarget.kind === 'marker') { const point = state.dragTarget.type === 'start' ? state.startPoint : state.endPoint; point.x = state.dragTarget.startX + dx; point.y = state.dragTarget.startY + dy; document.getElementById(state.dragTarget.type === 'start' ? 'startMarker' : 'endMarker').style.left = point.x + 'px'; document.getElementById(state.dragTarget.type === 'start' ? 'startMarker' : 'endMarker').style.top = point.y + 'px'; } else if (state.dragTarget.kind === 'handle') { const point = state.dragTarget.type === 'cp1' ? state.cp1 : state.cp2; point.x = state.dragTarget.startX + dx; point.y = state.dragTarget.startY + dy; document.getElementById(state.dragTarget.type === 'cp1' ? 'handle1' : 'handle2').style.left = point.x + 'px'; document.getElementById(state.dragTarget.type === 'cp1' ? 'handle1' : 'handle2').style.top = point.y + 'px'; } drawCurve(); }
+        function handleDragEnd() { if (!state.isDragging) return; document.getElementById('startMarker').classList.remove('highlight'); document.getElementById('endMarker').classList.remove('highlight'); if (state.dragTarget) { const point = state.dragTarget.kind === 'marker' ? (state.dragTarget.type === 'start' ? state.startPoint : state.endPoint) : (state.dragTarget.type === 'cp1' ? state.cp1 : state.cp2); saveHistory('move', { kind: state.dragTarget.kind, type: state.dragTarget.type, oldX: state.dragTarget.startX, oldY: state.dragTarget.startY, newX: point.x, newY: point.y }); } state.isDragging = false; state.dragTarget = null; updateUI(); }
         
         function handleAddClick() {
             const preview = document.getElementById('previewArea'); const rect = preview.getBoundingClientRect();
             if (state.mode === 'idle') {
                 pauseVideo(); state.startPoint = { x: rect.width * 0.55, y: rect.height * 0.78 };
                 const marker = document.getElementById('startMarker'); marker.style.left = state.startPoint.x + 'px'; marker.style.top = state.startPoint.y + 'px'; marker.classList.add('active');
-                state.mode = 'startMarked'; saveHistory('markStart', { point: { ...state.startPoint } }); showHint('点击标记落点位置');
+                state.mode = 'startMarked'; saveHistory('markStart', { startPoint: { ...state.startPoint } }); showHint('点击标记落点位置');
             } else if (state.mode === 'startMarked') {
                 state.endPoint = { x: rect.width * 0.75, y: rect.height * 0.45 };
                 const marker = document.getElementById('endMarker'); marker.style.left = state.endPoint.x + 'px'; marker.style.top = state.endPoint.y + 'px'; marker.classList.add('active');
-                state.mode = 'editing'; saveHistory('markEnd', { point: { ...state.endPoint } }); drawCurve(); showHint('拖动标记调整位置'); setTimeout(() => hideHint(), 2000);
+                state.mode = 'editing'; saveHistory('markEnd', { endPoint: { ...state.endPoint } }); drawCurve(); updateControlHandles(); showHint('拖动标记或控制点调整曲线'); setTimeout(() => hideHint(), 2500);
             }
             updateUI();
         }
         
         function saveHistory(action, data) { state.history = state.history.slice(0, state.historyIndex + 1); state.history.push({ action, data, timestamp: Date.now() }); if (state.history.length > MAX_HISTORY) state.history.shift(); else state.historyIndex++; }
-        function undo() { if (state.historyIndex < 0) return; const action = state.history[state.historyIndex]; state.historyIndex--; if (action.action === 'markStart') { state.startPoint = null; state.mode = 'idle'; document.getElementById('startMarker').classList.remove('active'); } else if (action.action === 'markEnd') { state.endPoint = null; state.mode = 'startMarked'; document.getElementById('endMarker').classList.remove('active'); } else if (action.action === 'moveMarker') { const point = action.data.type === 'start' ? state.startPoint : state.endPoint; point.x = action.data.oldX; point.y = action.data.oldY; updateMarkerPosition(action.data.type); } drawCurve(); updateUI(); }
-        function redo() { if (state.historyIndex >= state.history.length - 1) return; state.historyIndex++; const action = state.history[state.historyIndex]; if (action.action === 'markStart') { state.startPoint = { ...action.data.point }; state.mode = 'startMarked'; document.getElementById('startMarker').classList.add('active'); updateMarkerPosition('start'); } else if (action.action === 'markEnd') { state.endPoint = { ...action.data.point }; state.mode = 'editing'; document.getElementById('endMarker').classList.add('active'); updateMarkerPosition('end'); } else if (action.action === 'moveMarker') { const point = action.data.type === 'start' ? state.startPoint : state.endPoint; point.x = action.data.newX; point.y = action.data.newY; updateMarkerPosition(action.data.type); } drawCurve(); updateUI(); }
+        
+        function undo() { if (state.historyIndex < 0) return; const item = state.history[state.historyIndex]; state.historyIndex--; if (item.action === 'markStart') { state.startPoint = null; state.mode = 'idle'; document.getElementById('startMarker').classList.remove('active'); } else if (item.action === 'markEnd') { state.endPoint = null; state.cp1 = null; state.cp2 = null; state.mode = 'startMarked'; document.getElementById('endMarker').classList.remove('active'); document.getElementById('handle1').classList.remove('active'); document.getElementById('handle2').classList.remove('active'); } else if (item.action === 'move') { restorePoint(item.data.kind, item.data.type, item.data.oldX, item.data.oldY); } drawCurve(); updateControlHandles(); updateUI(); }
+        function redo() { if (state.historyIndex >= state.history.length - 1) return; state.historyIndex++; const item = state.history[state.historyIndex]; if (item.action === 'markStart') { state.startPoint = { ...item.data.startPoint }; state.mode = 'startMarked'; document.getElementById('startMarker').classList.add('active'); document.getElementById('startMarker').style.left = state.startPoint.x + 'px'; document.getElementById('startMarker').style.top = state.startPoint.y + 'px'; } else if (item.action === 'markEnd') { state.endPoint = { ...item.data.endPoint }; state.mode = 'editing'; document.getElementById('endMarker').classList.add('active'); document.getElementById('endMarker').style.left = state.endPoint.x + 'px'; document.getElementById('endMarker').style.top = state.endPoint.y + 'px'; } else if (item.action === 'move') { restorePoint(item.data.kind, item.data.type, item.data.newX, item.data.newY); } drawCurve(); updateControlHandles(); updateUI(); }
+        
+        function restorePoint(kind, type, x, y) {
+            let point;
+            if (kind === 'marker') point = type === 'start' ? state.startPoint : state.endPoint;
+            else point = type === 'cp1' ? state.cp1 : state.cp2;
+            point.x = x; point.y = y;
+            if (kind === 'marker') { const el = document.getElementById(type === 'start' ? 'startMarker' : 'endMarker'); el.style.left = x + 'px'; el.style.top = y + 'px'; }
+            else { const el = document.getElementById(type === 'cp1' ? 'handle1' : 'handle2'); el.style.left = x + 'px'; el.style.top = y + 'px'; }
+        }
         
         function setupTimelineDrag() { const container = document.getElementById('timelineContainer'); let startX = 0, startTime = 0; const onStart = (clientX) => { state.isDragging = true; startX = clientX; startTime = state.currentTime; pauseVideo(); }; const onMove = (clientX) => { if (!state.isDragging) return; state.currentTime = Math.max(0, Math.min(state.duration, startTime + (startX - clientX) * 0.008)); updateTimeline(); updateTimeDisplay(); }; const onEnd = () => { state.isDragging = false; }; container.addEventListener('mousedown', (e) => onStart(e.clientX)); container.addEventListener('mousemove', (e) => onMove(e.clientX)); container.addEventListener('mouseup', onEnd); container.addEventListener('mouseleave', onEnd); container.addEventListener('touchstart', (e) => onStart(e.touches[0].clientX), { passive: true }); container.addEventListener('touchmove', (e) => { e.preventDefault(); onMove(e.touches[0].clientX); }, { passive: false }); container.addEventListener('touchend', onEnd); }
         
@@ -227,7 +295,7 @@
         function showHint(text) { const hint = document.getElementById('opHint'); hint.textContent = text; hint.classList.add('show'); }
         function hideHint() { document.getElementById('opHint').classList.remove('show'); }
         function handleCancel() { if (confirm('放弃当前编辑？')) resetAll(); }
-        function resetAll() { state.startPoint = null; state.endPoint = null; state.mode = 'idle'; state.history = []; state.historyIndex = -1; document.getElementById('startMarker').classList.remove('active'); document.getElementById('endMarker').classList.remove('active'); document.getElementById('addBtn').style.opacity = '1'; document.getElementById('addBtn').style.pointerEvents = 'all'; const canvas = document.getElementById('traceCanvas'); canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height); updateUI(); }
+        function resetAll() { state.startPoint = null; state.endPoint = null; state.cp1 = null; state.cp2 = null; state.mode = 'idle'; state.history = []; state.historyIndex = -1; document.getElementById('startMarker').classList.remove('active'); document.getElementById('endMarker').classList.remove('active'); document.getElementById('handle1').classList.remove('active'); document.getElementById('handle2').classList.remove('active'); document.getElementById('addBtn').style.opacity = '1'; document.getElementById('addBtn').style.pointerEvents = 'all'; const canvas = document.getElementById('traceCanvas'); canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height); updateUI(); }
         function handleSave() { if (!state.endPoint) return; const overlay = document.getElementById('exportOverlay'), fill = document.getElementById('progressFill'), text = document.getElementById('progressText'); overlay.classList.add('visible'); let progress = 0; const interval = setInterval(() => { progress += Math.random() * 20 + 5; if (progress >= 100) { progress = 100; clearInterval(interval); setTimeout(() => { overlay.classList.remove('visible'); showToast('已保存到相册'); }, 500); } fill.style.width = progress + '%'; text.textContent = Math.floor(progress); }, 200); }
         function showToast(msg) { const toast = document.getElementById('toast'); toast.textContent = msg; toast.classList.add('show'); setTimeout(() => toast.classList.remove('show'), 2500); }
         init();
