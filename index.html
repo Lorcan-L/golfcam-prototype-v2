@@ -79,14 +79,14 @@
         }
         
         .nav-btn {
-            font-size: 17px;
-            padding: 7px 14px;
-            border-radius: 10px;
+            font-size: 14px;
+            padding: 6px 16px;
+            border-radius: 20px;
             cursor: pointer;
             transition: all 0.2s var(--ease-smooth);
-            font-weight: 400;
+            font-weight: 600;
             border: none;
-            background: transparent;
+            background: rgba(255,255,255,0.1);
             color: var(--ios-label);
             letter-spacing: -0.01em;
             position: relative;
@@ -113,11 +113,12 @@
         }
         
         .nav-btn.save {
-            color: var(--ios-green);
-            font-weight: 600;
-            opacity: 0.35;
+            background: linear-gradient(135deg, #FFD60A 0%, #FFC400 100%);
+            color: #000;
+            opacity: 0.4;
             pointer-events: none;
             transition: all 0.3s var(--ease-smooth);
+            box-shadow: 0 2px 8px rgba(255, 214, 10, 0.2);
         }
         
         .nav-btn.save.active {
@@ -125,18 +126,9 @@
             pointer-events: all;
         }
         
-        .nav-btn.save.active:hover::before {
-            background: rgba(48, 209, 88, 0.15);
-        }
-        
-        .nav-title {
-            font-size: 17px;
-            font-weight: 600;
-            color: var(--ios-label);
-            position: absolute;
-            left: 50%;
-            transform: translateX(-50%);
-            letter-spacing: -0.02em;
+        .nav-btn.save.active:active {
+            transform: scale(0.94);
+            box-shadow: 0 4px 12px rgba(255, 214, 10, 0.35);
         }
         
         /* 视频预览区 */
@@ -386,8 +378,8 @@
         .play-btn-timeline {
             width: 32px;
             height: 32px;
-            border-radius: 50%;
-            background: linear-gradient(135deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.1) 100%);
+            border-radius: 8px;
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.6) 0%, rgba(139, 92, 246, 0.5) 100%);
             border: none;
             color: var(--ios-label);
             font-size: 12px;
@@ -397,13 +389,13 @@
             justify-content: center;
             flex-shrink: 0;
             transition: all 0.2s var(--ease-smooth);
-            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+            box-shadow: 0 2px 6px rgba(99, 102, 241, 0.3);
             backdrop-filter: blur(8px);
         }
         
         .play-btn-timeline:active {
             transform: scale(0.88);
-            background: linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.15) 100%);
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.8) 0%, rgba(139, 92, 246, 0.7) 100%);
         }
         
         .timeline-track-container {
@@ -521,52 +513,57 @@
         }
         
         .toolbar-btn .icon {
-            width: 28px;
-            height: 28px;
-            font-size: 20px;
+            width: 24px;
+            height: 24px;
             display: flex;
             align-items: center;
             justify-content: center;
             transition: transform 0.2s var(--ease-spring);
         }
         
-        /* 主添加按钮 */
+        .toolbar-btn .icon svg {
+            width: 100%;
+            height: 100%;
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+        
+        /* 主添加按钮 - 圆形 */
         .add-btn {
-            background: linear-gradient(135deg, #0A84FF 0%, #0066CC 100%);
+            width: 52px;
+            height: 52px;
+            border-radius: 50%;
+            background: var(--ios-blue);
             color: #fff;
             border: none;
-            border-radius: 14px;
-            padding: 13px 36px;
-            font-size: 16px;
-            font-weight: 600;
             cursor: pointer;
             transition: all 0.25s var(--ease-smooth);
             box-shadow: 
                 0 4px 20px rgba(10, 132, 255, 0.35),
                 0 1px 3px rgba(0,0,0,0.2),
                 inset 0 1px 0 rgba(255,255,255,0.15);
-            letter-spacing: -0.01em;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             position: relative;
             overflow: hidden;
         }
         
-        .add-btn::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
-            transition: left 0.5s;
-        }
-        
-        .add-btn:hover::before {
-            left: 100%;
+        .add-btn svg {
+            width: 24px;
+            height: 24px;
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 2.5;
+            stroke-linecap: round;
+            stroke-linejoin: round;
         }
         
         .add-btn:active {
-            transform: scale(0.95);
+            transform: scale(0.92);
             box-shadow: 
                 0 2px 12px rgba(10, 132, 255, 0.25),
                 0 1px 2px rgba(0,0,0,0.2),
@@ -686,7 +683,6 @@
         
         <div class="nav-bar">
             <button class="nav-btn" onclick="handleCancel()">取消</button>
-            <div class="nav-title">编辑</div>
             <button class="nav-btn save" id="saveBtn" onclick="handleSave()">完成</button>
         </div>
         
@@ -728,14 +724,20 @@
         
         <div class="bottom-toolbar">
             <button class="toolbar-btn" id="undoBtn" onclick="undo()" disabled>
-                <span class="icon">↩</span>
+                <span class="icon">
+                    <svg viewBox="0 0 24 24"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg>
+                </span>
                 <span>撤销</span>
             </button>
             
-            <button class="add-btn" id="addBtn" onclick="startAddMode()">添加轨迹</button>
+            <button class="add-btn" id="addBtn" onclick="startAddMode()">
+                <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            </button>
             
             <button class="toolbar-btn" id="clearBtn" onclick="clearAll()" disabled>
-                <span class="icon">🗑</span>
+                <span class="icon">
+                    <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                </span>
                 <span>清除</span>
             </button>
         </div>
