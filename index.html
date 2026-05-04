@@ -1,0 +1,1116 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Shot Trace Editor</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
+            background: #000;
+            color: #fff;
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .device-frame {
+            width: 100%;
+            max-width: 392px;
+            height: 100vh;
+            max-height: 852px;
+            background: #000;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        @media (min-width: 420px) {
+            .device-frame {
+                height: 852px;
+                border-radius: 40px;
+                border: 8px solid #1a1a1a;
+                box-shadow: 0 25px 50px -12px rgba(0,0,0,0.8);
+            }
+        }
+        
+        .nav-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 16px;
+            background: rgba(0,0,0,0.85);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            z-index: 100;
+        }
+        
+        .nav-btn {
+            font-size: 17px;
+            padding: 6px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: opacity 0.2s;
+            font-weight: 400;
+            border: none;
+            background: none;
+            color: #fff;
+        }
+        
+        .nav-btn:active { opacity: 0.6; }
+        
+        .nav-btn.save {
+            color: #34c759;
+            font-weight: 600;
+            opacity: 0.4;
+            pointer-events: none;
+        }
+        
+        .nav-btn.save.active {
+            opacity: 1;
+            pointer-events: all;
+        }
+        
+        .nav-title {
+            font-size: 17px;
+            font-weight: 600;
+            color: #fff;
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+        
+        .preview-area {
+            flex: 1;
+            position: relative;
+            background: #000;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .video-layer {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            background: linear-gradient(180deg, #ff9a9e 0%, #fecfef 30%, #a8edea 60%, #7ee8fa 100%);
+        }
+        
+        .golf-scene-bg {
+            position: absolute;
+            inset: 0;
+            background: 
+                radial-gradient(ellipse at 50% 100%, #1a5f1a 0%, #0d3d0d 40%, transparent 70%),
+                linear-gradient(180deg, #87CEEB 0%, #E0F6FF 50%, #90EE90 100%);
+        }
+        
+        .golf-player {
+            position: absolute;
+            bottom: 20%;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 100px;
+            filter: drop-shadow(0 4px 12px rgba(0,0,0,0.3));
+            z-index: 2;
+        }
+        
+        .golf-ball {
+            position: absolute;
+            bottom: 22%;
+            left: 55%;
+            width: 12px;
+            height: 12px;
+            background: #fff;
+            border-radius: 50%;
+            box-shadow: 0 0 4px rgba(0,0,0,0.3);
+            z-index: 3;
+        }
+        
+        .crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 40px;
+            height: 40px;
+            pointer-events: none;
+            z-index: 50;
+            display: none;
+        }
+        
+        .crosshair.active { display: block; }
+        
+        .crosshair::before,
+        .crosshair::after {
+            content: '';
+            position: absolute;
+            background: rgba(255,255,255,0.9);
+        }
+        
+        .crosshair::before {
+            width: 1px;
+            height: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+        
+        .crosshair::after {
+            width: 100%;
+            height: 1px;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+        
+        .crosshair-circle {
+            position: absolute;
+            inset: 4px;
+            border: 1.5px solid rgba(255,255,255,0.6);
+            border-radius: 50%;
+        }
+        
+        .anchor-point {
+            position: absolute;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            border: 2px solid #fff;
+            transform: translate(-50%, -50%);
+            cursor: grab;
+            z-index: 30;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.4), inset 0 0 0 2px rgba(255,255,255,0.3);
+            transition: transform 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .anchor-point:active {
+            cursor: grabbing;
+            transform: translate(-50%, -50%) scale(1.15);
+        }
+        
+        .anchor-point.start { background: #30d158; }
+        .anchor-point.end { background: #ff453a; }
+        
+        .anchor-inner {
+            width: 8px;
+            height: 8px;
+            background: #fff;
+            border-radius: 50%;
+        }
+        
+        .control-handle {
+            position: absolute;
+            width: 16px;
+            height: 16px;
+            background: #fff;
+            border: 2px solid #007aff;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            cursor: grab;
+            z-index: 45;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+        }
+        
+        .control-handle:active {
+            cursor: grabbing;
+            transform: translate(-50%, -50%) scale(1.2);
+        }
+        
+        #traceCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 25;
+        }
+        
+        .timeline-area {
+            background: rgba(20,20,20,0.95);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            padding: 12px 0;
+            border-top: 0.5px solid rgba(255,255,255,0.08);
+        }
+        
+        .time-display {
+            display: flex;
+            justify-content: space-between;
+            padding: 0 20px;
+            margin-bottom: 10px;
+            font-size: 11px;
+            color: rgba(255,255,255,0.4);
+            font-variant-numeric: tabular-nums;
+        }
+        
+        .timeline-wrapper {
+            display: flex;
+            align-items: center;
+            padding: 0 12px;
+            gap: 8px;
+        }
+        
+        .play-btn-timeline {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.15);
+            border: none;
+            color: #fff;
+            font-size: 11px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            transition: background 0.2s;
+        }
+        
+        .play-btn-timeline:active { background: rgba(255,255,255,0.25); }
+        
+        .timeline-track-container {
+            flex: 1;
+            position: relative;
+            height: 56px;
+            overflow: hidden;
+            border-radius: 6px;
+        }
+        
+        .timeline-track {
+            display: flex;
+            gap: 1px;
+            height: 100%;
+            transition: transform 0.1s linear;
+        }
+        
+        .frame-thumb {
+            flex-shrink: 0;
+            width: 48px;
+            height: 100%;
+            position: relative;
+            overflow: hidden;
+            opacity: 0.5;
+            transition: opacity 0.2s;
+        }
+        
+        .frame-thumb.active { opacity: 1; }
+        
+        .frame-thumb-inner {
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        .frame-thumb:nth-child(3n+1) .frame-thumb-inner {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+        }
+        
+        .frame-thumb:nth-child(3n+2) .frame-thumb-inner {
+            background: linear-gradient(135deg, #fc5c7d 0%, #6a82fb 100%);
+        }
+        
+        .playhead {
+            position: absolute;
+            left: 50%;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: #fff;
+            transform: translateX(-50%);
+            z-index: 10;
+            pointer-events: none;
+        }
+        
+        .playhead::after {
+            content: '';
+            position: absolute;
+            top: -3px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 0;
+            border-left: 4px solid transparent;
+            border-right: 4px solid transparent;
+            border-top: 5px solid #fff;
+        }
+        
+        .bottom-toolbar {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 16px 20px 32px;
+            background: rgba(20,20,20,0.95);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            gap: 20px;
+            border-top: 0.5px solid rgba(255,255,255,0.08);
+        }
+        
+        .toolbar-btn {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            background: none;
+            border: none;
+            color: rgba(255,255,255,0.6);
+            font-size: 10px;
+            cursor: pointer;
+            transition: color 0.2s;
+            padding: 4px 8px;
+        }
+        
+        .toolbar-btn:active { color: rgba(255,255,255,0.8); }
+        .toolbar-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+        
+        .toolbar-btn .icon {
+            width: 24px;
+            height: 24px;
+            font-size: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .add-btn {
+            background: #007aff;
+            color: #fff;
+            border: none;
+            border-radius: 12px;
+            padding: 12px 32px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 0 4px 16px rgba(0,122,255,0.3);
+        }
+        
+        .add-btn:active {
+            transform: scale(0.96);
+            background: #0056b3;
+        }
+        
+        .add-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+        
+        .operation-hint {
+            position: absolute;
+            top: 16px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.7);
+            backdrop-filter: blur(10px);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 500;
+            color: #fff;
+            z-index: 60;
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+            white-space: nowrap;
+        }
+        
+        .operation-hint.show { opacity: 1; }
+        
+        .export-overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(0,0,0,0.85);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            z-index: 200;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s;
+        }
+        
+        .export-overlay.visible {
+            opacity: 1;
+            pointer-events: all;
+        }
+        
+        .progress-track {
+            width: 200px;
+            height: 4px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 2px;
+            overflow: hidden;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: #34c759;
+            border-radius: 2px;
+            transition: width 0.3s;
+        }
+        
+        .export-text {
+            font-size: 15px;
+            font-weight: 500;
+            color: #fff;
+        }
+        
+        .toast {
+            position: absolute;
+            top: 60px;
+            left: 50%;
+            transform: translateX(-50%) translateY(-20px);
+            background: rgba(52,199,89,0.9);
+            backdrop-filter: blur(10px);
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 500;
+            color: #fff;
+            opacity: 0;
+            transition: all 0.3s;
+            z-index: 300;
+            pointer-events: none;
+        }
+        
+        .toast.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+    </style>
+</head>
+<body>
+    <div class="device-frame">
+        <div class="toast" id="toast">已保存到相册</div>
+        
+        <div class="nav-bar">
+            <button class="nav-btn" onclick="handleCancel()">取消</button>
+            <div class="nav-title">编辑</div>
+            <button class="nav-btn save" id="saveBtn" onclick="handleSave()">完成</button>
+        </div>
+        
+        <div class="operation-hint" id="opHint"></div>
+        
+        <div class="preview-area" id="previewArea">
+            <div class="video-layer" id="videoLayer">
+                <div class="golf-scene-bg"></div>
+                <div class="golf-player">🏌️</div>
+                <div class="golf-ball"></div>
+            </div>
+            <canvas id="traceCanvas"></canvas>
+            
+            <div class="crosshair" id="crosshair">
+                <div class="crosshair-circle"></div>
+            </div>
+            
+            <div class="export-overlay" id="exportOverlay">
+                <div class="export-text">正在导出... <span id="progressText">0</span>%</div>
+                <div class="progress-track">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="timeline-area">
+            <div class="time-display">
+                <span id="currentTime">00:00.00</span>
+                <span id="totalTime">00:05.23</span>
+            </div>
+            <div class="timeline-wrapper">
+                <button class="play-btn-timeline" id="playBtn" onclick="togglePlay()">▶</button>
+                <div class="timeline-track-container" id="timelineContainer">
+                    <div class="timeline-track" id="timelineTrack"></div>
+                    <div class="playhead"></div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="bottom-toolbar">
+            <button class="toolbar-btn" id="undoBtn" onclick="undo()" disabled>
+                <span class="icon">↩</span>
+                <span>撤销</span>
+            </button>
+            
+            <button class="add-btn" id="addBtn" onclick="startAddMode()">添加轨迹</button>
+            
+            <button class="toolbar-btn" id="clearBtn" onclick="clearAll()" disabled>
+                <span class="icon">🗑</span>
+                <span>清除</span>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const state = {
+            mode: 'idle',
+            currentTime: 0,
+            duration: 5.23,
+            isPlaying: false,
+            anchors: [],
+            history: [],
+            historyIndex: -1,
+            curveControl: { cp1x: 0, cp1y: 0, cp2x: 0, cp2y: 0 },
+            isDragging: false,
+            dragTarget: null,
+            videoSize: { width: 0, height: 0 }
+        };
+        
+        const MAX_HISTORY = 100;
+        
+        function init() {
+            generateFrames();
+            setupTimelineDrag();
+            setupCanvas();
+            setupPreviewInteractions();
+            updateUI();
+        }
+        
+        function generateFrames() {
+            const track = document.getElementById('timelineTrack');
+            for (let i = 0; i < 30; i++) {
+                const frame = document.createElement('div');
+                frame.className = 'frame-thumb' + (i === 0 ? ' active' : '');
+                frame.innerHTML = '<div class="frame-thumb-inner"></div>';
+                track.appendChild(frame);
+            }
+        }
+        
+        function setupCanvas() {
+            const canvas = document.getElementById('traceCanvas');
+            const container = document.getElementById('previewArea');
+            
+            function resize() {
+                canvas.width = container.clientWidth;
+                canvas.height = container.clientHeight;
+                state.videoSize = { width: canvas.width, height: canvas.height };
+                drawCurve();
+            }
+            
+            resize();
+            window.addEventListener('resize', resize);
+        }
+        
+        function drawCurve() {
+            const canvas = document.getElementById('traceCanvas');
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            if (state.anchors.length < 2) return;
+            
+            const start = state.anchors.find(a => a.type === 'start');
+            const end = state.anchors.find(a => a.type === 'end');
+            if (!start || !end) return;
+            
+            const midX = (start.x + end.x) / 2;
+            const midY = (start.y + end.y) / 2;
+            const cp1x = midX + state.curveControl.cp1x;
+            const cp1y = midY - 80 + state.curveControl.cp1y;
+            const cp2x = midX + state.curveControl.cp2x;
+            const cp2y = midY - 80 + state.curveControl.cp2y;
+            
+            ctx.save();
+            ctx.shadowColor = '#30d158';
+            ctx.shadowBlur = 12;
+            ctx.strokeStyle = '#30d158';
+            ctx.lineWidth = 4;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            
+            ctx.beginPath();
+            ctx.moveTo(start.x, start.y);
+            ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, end.x, end.y);
+            ctx.stroke();
+            
+            ctx.shadowBlur = 0;
+            ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+            ctx.restore();
+            
+            if (state.mode === 'editing') {
+                drawControlLines(start, end, cp1x, cp1y, cp2x, cp2y);
+            }
+        }
+        
+        function drawControlLines(start, end, cp1x, cp1y, cp2x, cp2y) {
+            const canvas = document.getElementById('traceCanvas');
+            const ctx = canvas.getContext('2d');
+            
+            ctx.save();
+            ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([4, 4]);
+            
+            ctx.beginPath();
+            ctx.moveTo(start.x, start.y);
+            ctx.lineTo(cp1x, cp1y);
+            ctx.stroke();
+            
+            ctx.beginPath();
+            ctx.moveTo(end.x, end.y);
+            ctx.lineTo(cp2x, cp2y);
+            ctx.stroke();
+            
+            ctx.restore();
+        }
+        
+        function updateControlHandles() {
+            document.querySelectorAll('.control-handle').forEach(el => el.remove());
+            
+            if (state.mode !== 'editing' || state.anchors.length < 2) return;
+            
+            const start = state.anchors.find(a => a.type === 'start');
+            const end = state.anchors.find(a => a.type === 'end');
+            if (!start || !end) return;
+            
+            const preview = document.getElementById('previewArea');
+            const midX = (start.x + end.x) / 2;
+            const midY = (start.y + end.y) / 2;
+            const cp1x = midX + state.curveControl.cp1x;
+            const cp1y = midY - 80 + state.curveControl.cp1y;
+            const cp2x = midX + state.curveControl.cp2x;
+            const cp2y = midY - 80 + state.curveControl.cp2y;
+            
+            createHandle(preview, cp1x, cp1y, 'cp1');
+            createHandle(preview, cp2x, cp2y, 'cp2');
+        }
+        
+        function createHandle(container, x, y, id) {
+            const handle = document.createElement('div');
+            handle.className = 'control-handle';
+            handle.dataset.id = id;
+            handle.style.left = x + 'px';
+            handle.style.top = y + 'px';
+            
+            handle.addEventListener('mousedown', (e) => startDragHandle(e, id));
+            handle.addEventListener('touchstart', (e) => startDragHandle(e, id), { passive: false });
+            
+            container.appendChild(handle);
+        }
+        
+        function setupPreviewInteractions() {
+            const preview = document.getElementById('previewArea');
+            
+            document.addEventListener('mousemove', handleDragMove);
+            document.addEventListener('mouseup', handleDragEnd);
+            document.addEventListener('touchmove', handleDragMove, { passive: false });
+            document.addEventListener('touchend', handleDragEnd);
+            
+            preview.addEventListener('click', (e) => {
+                if (state.mode !== 'adding') return;
+                
+                const rect = preview.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                
+                addAnchorPoint(x, y);
+            });
+        }
+        
+        function startAddMode() {
+            if (state.anchors.length >= 2) {
+                state.mode = 'editing';
+                updateControlHandles();
+                const hint = document.getElementById('opHint');
+                hint.textContent = '拖动控制点调整曲线';
+                hint.classList.add('show');
+                setTimeout(() => hint.classList.remove('show'), 2000);
+                updateUI();
+                return;
+            }
+            
+            pauseVideo();
+            state.mode = 'adding';
+            
+            const crosshair = document.getElementById('crosshair');
+            crosshair.classList.add('active');
+            
+            const hint = document.getElementById('opHint');
+            hint.textContent = state.anchors.length === 0 ? '点击视频标记起始位置' : '点击视频标记结束位置';
+            hint.classList.add('show');
+            
+            updateUI();
+        }
+        
+        function addAnchorPoint(x, y) {
+            const type = state.anchors.length === 0 ? 'start' : 'end';
+            const anchor = { x, y, type, id: Date.now() };
+            state.anchors.push(anchor);
+            
+            saveHistory('addPoint', { anchor });
+            
+            createAnchorElement(anchor);
+            drawCurve();
+            
+            if (state.anchors.length >= 2) {
+                state.mode = 'editing';
+                document.getElementById('crosshair').classList.remove('active');
+                
+                const start = state.anchors.find(a => a.type === 'start');
+                const end = state.anchors.find(a => a.type === 'end');
+                const midX = (start.x + end.x) / 2;
+                const midY = (start.y + end.y) / 2;
+                state.curveControl = {
+                    cp1x: (start.x - midX) * 0.5,
+                    cp1y: -60,
+                    cp2x: (end.x - midX) * 0.5,
+                    cp2y: -60
+                };
+                
+                updateControlHandles();
+                
+                const hint = document.getElementById('opHint');
+                hint.textContent = '拖动控制点调整曲线';
+                setTimeout(() => hint.classList.remove('show'), 2000);
+            } else {
+                const hint = document.getElementById('opHint');
+                hint.textContent = '点击视频标记结束位置';
+            }
+            
+            updateUI();
+        }
+        
+        function createAnchorElement(anchor) {
+            const preview = document.getElementById('previewArea');
+            const el = document.createElement('div');
+            el.className = `anchor-point ${anchor.type}`;
+            el.dataset.id = anchor.id;
+            el.style.left = anchor.x + 'px';
+            el.style.top = anchor.y + 'px';
+            el.innerHTML = '<div class="anchor-inner"></div>';
+            
+            el.addEventListener('mousedown', (e) => startDragAnchor(e, anchor));
+            el.addEventListener('touchstart', (e) => startDragAnchor(e, anchor), { passive: false });
+            
+            preview.appendChild(el);
+        }
+        
+        function startDragAnchor(e, anchor) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            state.isDragging = true;
+            state.dragTarget = { type: 'anchor', anchor, startX: anchor.x, startY: anchor.y };
+            
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            state.dragTarget.mouseStartX = clientX;
+            state.dragTarget.mouseStartY = clientY;
+        }
+        
+        function startDragHandle(e, handleId) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            state.isDragging = true;
+            state.dragTarget = { type: 'handle', id: handleId };
+            
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            state.dragTarget.mouseStartX = clientX;
+            state.dragTarget.mouseStartY = clientY;
+            state.dragTarget.startCp = { ...state.curveControl };
+        }
+        
+        function handleDragMove(e) {
+            if (!state.isDragging || !state.dragTarget) return;
+            e.preventDefault();
+            
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            const dx = clientX - state.dragTarget.mouseStartX;
+            const dy = clientY - state.dragTarget.mouseStartY;
+            
+            if (state.dragTarget.type === 'anchor') {
+                const anchor = state.dragTarget.anchor;
+                anchor.x = state.dragTarget.startX + dx;
+                anchor.y = state.dragTarget.startY + dy;
+                
+                const el = document.querySelector(`[data-id="${anchor.id}"]`);
+                if (el) {
+                    el.style.left = anchor.x + 'px';
+                    el.style.top = anchor.y + 'px';
+                }
+                
+                drawCurve();
+                updateControlHandles();
+            } else if (state.dragTarget.type === 'handle') {
+                const id = state.dragTarget.id;
+                const multiplier = 1.5;
+                
+                if (id === 'cp1') {
+                    state.curveControl.cp1x = state.dragTarget.startCp.cp1x + dx * multiplier;
+                    state.curveControl.cp1y = state.dragTarget.startCp.cp1y + dy * multiplier;
+                } else {
+                    state.curveControl.cp2x = state.dragTarget.startCp.cp2x + dx * multiplier;
+                    state.curveControl.cp2y = state.dragTarget.startCp.cp2y + dy * multiplier;
+                }
+                
+                drawCurve();
+                updateControlHandles();
+            }
+        }
+        
+        function handleDragEnd() {
+            if (!state.isDragging) return;
+            
+            if (state.dragTarget) {
+                if (state.dragTarget.type === 'anchor') {
+                    saveHistory('moveAnchor', {
+                        anchor: state.dragTarget.anchor,
+                        oldX: state.dragTarget.startX,
+                        oldY: state.dragTarget.startY
+                    });
+                } else if (state.dragTarget.type === 'handle') {
+                    saveHistory('adjustCurve', {
+                        oldCp: state.dragTarget.startCp,
+                        newCp: { ...state.curveControl }
+                    });
+                }
+            }
+            
+            state.isDragging = false;
+            state.dragTarget = null;
+            updateUI();
+        }
+        
+        function saveHistory(action, data) {
+            state.history = state.history.slice(0, state.historyIndex + 1);
+            state.history.push({ action, data, timestamp: Date.now() });
+            
+            if (state.history.length > MAX_HISTORY) {
+                state.history.shift();
+            } else {
+                state.historyIndex++;
+            }
+        }
+        
+        function undo() {
+            if (state.historyIndex < 0) return;
+            
+            const action = state.history[state.historyIndex];
+            state.historyIndex--;
+            
+            if (action.action === 'addPoint') {
+                const idx = state.anchors.findIndex(a => a.id === action.data.anchor.id);
+                if (idx > -1) {
+                    state.anchors.splice(idx, 1);
+                    const el = document.querySelector(`[data-id="${action.data.anchor.id}"]`);
+                    if (el) el.remove();
+                }
+                
+                if (state.anchors.length < 2) {
+                    state.mode = state.anchors.length === 0 ? 'idle' : 'adding';
+                    document.querySelectorAll('.control-handle').forEach(el => el.remove());
+                }
+            } else if (action.action === 'moveAnchor') {
+                const anchor = action.data.anchor;
+                anchor.x = action.data.oldX;
+                anchor.y = action.data.oldY;
+                
+                const el = document.querySelector(`[data-id="${anchor.id}"]`);
+                if (el) {
+                    el.style.left = anchor.x + 'px';
+                    el.style.top = anchor.y + 'px';
+                }
+            } else if (action.action === 'adjustCurve') {
+                state.curveControl = { ...action.data.oldCp };
+            }
+            
+            drawCurve();
+            updateControlHandles();
+            updateUI();
+        }
+        
+        function clearAll() {
+            state.anchors = [];
+            state.history = [];
+            state.historyIndex = -1;
+            state.mode = 'idle';
+            state.curveControl = { cp1x: 0, cp1y: 0, cp2x: 0, cp2y: 0 };
+            
+            document.querySelectorAll('.anchor-point').forEach(el => el.remove());
+            document.querySelectorAll('.control-handle').forEach(el => el.remove());
+            document.getElementById('crosshair').classList.remove('active');
+            
+            drawCurve();
+            updateUI();
+        }
+        
+        function setupTimelineDrag() {
+            const container = document.getElementById('timelineContainer');
+            let startX = 0;
+            let startTime = 0;
+            
+            const onStart = (clientX) => {
+                state.isDragging = true;
+                startX = clientX;
+                startTime = state.currentTime;
+                pauseVideo();
+            };
+            
+            const onMove = (clientX) => {
+                if (!state.isDragging) return;
+                const dx = startX - clientX;
+                const sensitivity = 0.008;
+                state.currentTime = Math.max(0, Math.min(state.duration, startTime + dx * sensitivity));
+                updateTimeline();
+                updateTimeDisplay();
+            };
+            
+            const onEnd = () => { state.isDragging = false; };
+            
+            container.addEventListener('mousedown', (e) => onStart(e.clientX));
+            container.addEventListener('mousemove', (e) => onMove(e.clientX));
+            container.addEventListener('mouseup', onEnd);
+            container.addEventListener('mouseleave', onEnd);
+            
+            container.addEventListener('touchstart', (e) => onStart(e.touches[0].clientX), { passive: true });
+            container.addEventListener('touchmove', (e) => { e.preventDefault(); onMove(e.touches[0].clientX); }, { passive: false });
+            container.addEventListener('touchend', onEnd);
+        }
+        
+        let playInterval;
+        function togglePlay() {
+            state.isPlaying = !state.isPlaying;
+            const btn = document.getElementById('playBtn');
+            
+            if (state.isPlaying) {
+                btn.textContent = '⏸';
+                playInterval = setInterval(() => {
+                    state.currentTime += 0.033;
+                    if (state.currentTime >= state.duration) state.currentTime = 0;
+                    updateTimeline();
+                    updateTimeDisplay();
+                }, 33);
+            } else {
+                btn.textContent = '▶';
+                clearInterval(playInterval);
+            }
+        }
+        
+        function pauseVideo() {
+            if (state.isPlaying) togglePlay();
+        }
+        
+        function updateTimeline() {
+            const track = document.getElementById('timelineTrack');
+            const frameWidth = 49;
+            const totalWidth = 30 * frameWidth;
+            const progress = state.currentTime / state.duration;
+            const offset = progress * totalWidth;
+            
+            track.style.transform = `translateX(${-offset}px)`;
+            
+            const frames = track.querySelectorAll('.frame-thumb');
+            const activeIndex = Math.floor(progress * frames.length);
+            frames.forEach((f, i) => f.classList.toggle('active', i === activeIndex));
+        }
+        
+        function updateTimeDisplay() {
+            document.getElementById('currentTime').textContent = formatTime(state.currentTime);
+        }
+        
+        function formatTime(s) {
+            const m = Math.floor(s / 60);
+            const sec = Math.floor(s % 60);
+            const ms = Math.floor((s % 1) * 100);
+            return `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}.${String(ms).padStart(2,'0')}`;
+        }
+        
+        function updateUI() {
+            const hasAnchors = state.anchors.length > 0;
+            const hasBothAnchors = state.anchors.length >= 2;
+            const canUndo = state.historyIndex >= 0;
+            
+            const addBtn = document.getElementById('addBtn');
+            if (hasBothAnchors) {
+                addBtn.textContent = '调整曲线';
+                addBtn.disabled = false;
+                addBtn.onclick = () => {
+                    state.mode = 'editing';
+                    updateControlHandles();
+                    const hint = document.getElementById('opHint');
+                    hint.textContent = '拖动控制点调整曲线';
+                    hint.classList.add('show');
+                    setTimeout(() => hint.classList.remove('show'), 2000);
+                };
+            } else {
+                addBtn.textContent = state.anchors.length === 0 ? '添加轨迹' : '标记结束';
+                addBtn.disabled = false;
+                addBtn.onclick = startAddMode;
+            }
+            
+            document.getElementById('undoBtn').disabled = !canUndo;
+            document.getElementById('clearBtn').disabled = !hasAnchors;
+            
+            const saveBtn = document.getElementById('saveBtn');
+            if (hasBothAnchors) saveBtn.classList.add('active');
+            else saveBtn.classList.remove('active');
+        }
+        
+        function handleCancel() {
+            if (confirm('放弃当前编辑？')) {
+                clearAll();
+                state.currentTime = 0;
+                updateTimeline();
+                updateTimeDisplay();
+            }
+        }
+        
+        function handleSave() {
+            if (state.anchors.length < 2) return;
+            
+            const overlay = document.getElementById('exportOverlay');
+            const fill = document.getElementById('progressFill');
+            const text = document.getElementById('progressText');
+            
+            overlay.classList.add('visible');
+            
+            let progress = 0;
+            const interval = setInterval(() => {
+                progress += Math.random() * 20 + 5;
+                if (progress >= 100) {
+                    progress = 100;
+                    clearInterval(interval);
+                    
+                    setTimeout(() => {
+                        overlay.classList.remove('visible');
+                        showToast('已保存到相册');
+                    }, 500);
+                }
+                
+                fill.style.width = progress + '%';
+                text.textContent = Math.floor(progress);
+            }, 200);
+        }
+        
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            toast.textContent = msg;
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 2500);
+        }
+        
+        init();
+    </script>
+</body>
+</html>
